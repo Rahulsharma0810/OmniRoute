@@ -235,9 +235,30 @@ export function isCompatibleFreeImportProvider(provider: string | undefined | nu
   );
 }
 
+/**
+ * Providers whose live `/models` payload carries per-model price data (`pricing.input` /
+ * `pricing.output`). They have no documented free tier, so they are NOT in
+ * `PROVIDERS_WITH_FREE_MODELS` (no Free badge, routing or auto-combo effect); only the
+ * "import only free models" option applies, judged by payload price evidence alone.
+ */
+const PRICED_PAYLOAD_IMPORT_PROVIDERS: ReadonlySet<string> = new Set(["vercel-ai-gateway"]);
+
+/** Whether the provider's own model list carries prices the free-only import can trust. */
+export function isPricedPayloadImportProvider(provider: string | undefined | null): boolean {
+  if (typeof provider !== "string") return false;
+  return (
+    PRICED_PAYLOAD_IMPORT_PROVIDERS.has(provider) ||
+    PRICED_PAYLOAD_IMPORT_PROVIDERS.has(resolveProviderId(provider))
+  );
+}
+
 /** Whether the "import only free models" connection option applies to this provider. */
 export function providerSupportsFreeOnlyImport(provider: string | undefined | null): boolean {
-  return providerHasFreeModels(provider) || isCompatibleFreeImportProvider(provider);
+  return (
+    providerHasFreeModels(provider) ||
+    isCompatibleFreeImportProvider(provider) ||
+    isPricedPayloadImportProvider(provider)
+  );
 }
 
 /** `providers.*` i18n key for the toggle hint: compatible nodes explain the payload rule. */
@@ -273,9 +294,10 @@ export function selectModelsForImport<T extends FreeModelCandidate>(
   if (!importFreeOnly) {
     return { models: fetchedModels, freeFilterEmpty: false };
   }
-  const isFree = isCompatibleFreeImportProvider(provider)
-    ? isFreeForCompatibleImport
-    : (m: T) => isFreeModel(provider, m);
+  const isFree =
+    isCompatibleFreeImportProvider(provider) || isPricedPayloadImportProvider(provider)
+      ? isFreeForCompatibleImport
+      : (m: T) => isFreeModel(provider, m);
   const models = fetchedModels.filter((m) => isFree(m));
   const freeFilterEmpty = fetchedModels.length > 0 && models.length === 0;
   return { models, freeFilterEmpty };
